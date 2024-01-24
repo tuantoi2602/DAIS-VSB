@@ -1,0 +1,148 @@
+TEST 1
+
+Task 1: Add into table Device attributes warning_msg of datatype VARCHAR2(50) and warning_at of datatype TIMESTAMP.
+Create trigger tgSetWarning that will be execute before insertion of any recorded event (is_recorded) and it will set
+the attribute warning_msg for the given device according to the attribute event_description of the respective event type 
+and the attribute warning_at to the current time stamp.
+
+
+ALTER TABLE Device ADD warning_msg VARCHAR(50);
+ALTER TABLE Device ADD warning_at TIMESTAMP;
+
+CREATE OR REPLACE TRIGGER tgSetWarning BEFORE INSERT ON Device_event FOR EACH ROW
+DECLARE
+	v_event_desc Event_type.event_description%TYPE;
+	v_is_recorded Event_type.is_recorded%TYPE;
+	v_now TIMESTAMP;
+BEGIN
+	SELECT event_description, is_recorded INTO v_event_desc, v_is_recorded
+	FROM event_type
+	WHERE event_type.tID = :new.tID;
+    
+	v_now := CURRENT_TIMESTAMP;
+    
+	IF v_is_recorded = 1 THEN
+    	UPDATE Device
+    	SET warning_msg = v_event_desc, warning_at = v_now
+    	WHERE dID = :new.dID;
+	END IF;
+END;
+
+
+Task 2: Add three attributes to the Device table: pID1, pID2, and pID3. All of these attributes will represent an optional foreign key to the Person table. 
+Write the procedure spSetDeviceStats with the parameter dID (ID of the device), which sets the values of new attributes pID1 - pID3 of the given device to the persons who reported the most faults on the given device, 
+i.e. pID1 will be the person who reported the most faults, pID2 will be the person who reported the second most faults,...
+If the number of faults of two persons is same, give priority to the order according to the person's ID.
+
+ALTER TABLE Device ADD pID1 INT REFERENCES Person;
+ALTER TABLE Device ADD pID2 INT REFERENCES Person;
+ALTER TABLE Device ADD pID3 INT REFERENCES Person;
+
+CREATE OR REPLACE PROCEDURE spSetDeviceStats(p_dID Device.dID%TYPE) AS
+  v_pos INT;
+BEGIN
+	v_pos := 1;
+	FOR cur IN (
+    	SELECT pID
+    	FROM Device_event
+    	WHERE Device_event.dID = p_dID
+    	GROUP BY pID
+    	ORDER BY COUNT(*) DESC, pID
+	) LOOP
+    	IF v_pos = 1 THEN
+        	UPDATE Device
+        	SET pID1 = cur.pID
+        	WHERE dID = p_dID;
+    	ELSIF v_pos = 2 THEN
+        	UPDATE Device
+        	SET pID2 = cur.pID
+        	WHERE dID = p_dID;
+    	ELSIF v_pos = 3 THEN
+        	UPDATE Device
+        	SET pID3 = cur.pID
+        	WHERE dID = p_dID;
+    	ELSE
+        	EXIT; -- ukonceni LOOP.
+    	END IF;
+   	 
+    	v_pos := v_pos + 1;
+	END LOOP;
+END;
+
+
+TEST 2
+
+Task 1: Add the required attribute is_inactive to the Device table, which can only take the values 0 or 1. For existing devices, the value will be set to 0. 
+Write the procedure spDeleteDevice with the parameter dID (device ID), which deletes all events of importance 0 or 1 on the device. If the device has no event of importance 2, 
+the device is also physically deleted. Otherwise, the device is only set to is_inactive to 1. The procedure will be handled as a transaction.
+
+ALTER TABLE Device ADD is_inactive INT DEFAULT 0 NOT NULL;
+ALTER TABLE Device ADD CHECK (is_inactive IN (0, 1));
+
+CREATE OR REPLACE PROCEDURE spDeleteDevice(p_dID Device.dID%TYPE) AS
+	v_cnt INT;
+BEGIN
+	DELETE FROM Device_event
+	WHERE
+    	dID = p_dID AND tID IN (
+        	SELECT tID
+        	FROM Event_type
+        	WHERE importance IN (0, 1)
+    	);
+    
+	SELECT COUNT(*) INTO v_cnt
+	FROM Device_event
+	WHERE dID = p_dID AND tID IN (
+        	SELECT tID
+        	FROM Event_type
+        	WHERE importance = 2
+	);
+    
+	IF v_cnt = 0 THEN
+    	DELETE FROM Device
+    	WHERE dID = p_dID;
+	ELSE
+    	UPDATE Device
+    	SET is_inactive = 1
+    	WHERE dID = p_dID;
+	END IF;
+    
+	COMMIT;
+EXCEPTION
+	WHEN OTHERS THEN
+    	ROLLBACK;
+END;
+
+
+
+Task 2:
+
+1, Write a procedure to PromoteEmployee, which will promote three regular employees (ie employees who have a defined bossID) with the highest processed time (ie the sum of the time spent on all events processed by them) to the boss (set their bossID to NULL). 
+The procedure will be handled as a transaction and a list of promoted employees will be displayed on the screen in the format:
+
+ List or promoted employees: 
+    1. Ivana
+    2. Hiro
+    3. Oumar
+
+Create or replace procedure PromoteEmployee
+as
+  CURSOR regular_employees is select person.pID, person.name, sum(endDate - startDate) odpracovana_doba from person join device_event on person.pID = device_event.pID where bossID is not NULL group by person.pID, person.name order by sum(endDate - startDate) desc;
+  counter int;
+begin
+  counter := 1;
+  dbms_output.put_line('List or promoted employees: ');
+  for one_employee in regular_employees loop
+    update person set bossID = NULL where pID = one_employee.pID; 
+    dbms_output.put_line('  ' || to_char(counter) || '. ' || one_employee.name);
+    exit when counter = 3;
+    counter := counter + 1;
+  end loop;
+  commit;
+exception
+  when others then
+    rollback;
+end;
+
+
+

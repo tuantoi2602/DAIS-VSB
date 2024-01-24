@@ -1,0 +1,547 @@
+use student;
+
+CREATE TABLE Student (
+  login    CHAR(6) PRIMARY KEY,
+  fname    VARCHAR(30) NOT NULL,
+  lname    VARCHAR(50) NOT NULL,
+  email    VARCHAR(50) NOT NULL); 
+  
+DROP TABLE Student;  
+
+--------------------------------------------------------------------------------
+-- Task 1.1:
+--------------------------------------------------------------------------------
+
+CREATE PROCEDURE AddStudent(@p_login CHAR(6), @p_fname VARCHAR(30), @p_lname VARCHAR(50), 
+  @p_email VARCHAR(50))
+AS
+BEGIN
+  insert into Student values(@p_login, @p_fname, @p_lname, @p_email);
+END  
+
+EXEC AddStudent 'kra28', 'Michal', 'Kr�tk�', 'michal.kratky@vsb.cz';
+
+select * from Student;
+
+--------------------------------------------------------------------------------
+-- Task 1.2:
+--------------------------------------------------------------------------------
+
+CREATE PROCEDURE PAddStudent(@p_login CHAR(6), @p_fname VARCHAR(30), @p_lname VARCHAR(50), 
+  @p_email VARCHAR(50), @p_ret VARCHAR(10) OUT)
+AS
+BEGIN
+  BEGIN TRY
+    insert into Student values(@p_login, @p_fname, @p_lname, @p_email);
+    SET @p_ret = 'ok'; 
+  END TRY  
+  BEGIN CATCH
+    SET @p_ret = 'error';
+  END CATCH  
+END  
+
+BEGIN
+  DECLARE @v_str VARCHAR(10);
+  EXEC PAddStudent 'kra38', 'Michal', 'Kr�tk�', 'michal.kratky@vsb.cz', @v_str OUT;
+  print @v_str;
+END
+
+select * from Student;
+
+--------------------------------------------------------------------------------
+-- Task 2:
+--------------------------------------------------------------------------------
+
+CREATE TABLE Teacher (
+  login CHAR(6) NOT NULL PRIMARY KEY,
+  fname VARCHAR(30) NOT NULL,
+  lname VARCHAR(50) NOT NULL,
+  email VARCHAR(50) NOT NULL,
+  department INT NOT NULL,
+  specialization VARCHAR(30) NULL);
+  
+drop table Teacher;
+  
+--------------------------------------------------------------------------------
+-- Task 2.1:
+--------------------------------------------------------------------------------
+
+-- Pozn�mka: T-SQL bohu�el neposkytuje oper�tory jako %TYPE a %ROWTYPE
+/* CREATE */ ALTER PROCEDURE StudentBecomeTeacher(@p_login CHAR(6), @p_department INT)
+AS
+BEGIN
+  insert into Teacher(login,fname,lname,email,department,specialization) 
+    select *,@p_department,NULL from Student where login=@p_login;
+  delete from Student where login=@p_login;
+END
+
+EXEC StudentBecomeTeacher 'kra38',1;
+
+select * from Student;
+select * from Teacher;
+
+--------------------------------------------------------------------------------
+-- Task 2.2:
+--------------------------------------------------------------------------------
+
+-- Pozn�mka: T-SQL bohu�el neposkytuje oper�tory jako %TYPE a %ROWTYPE
+/* CREATE */ ALTER PROCEDURE StudentBecomeTeacher(@p_login CHAR(6), @p_department INT)
+AS
+BEGIN
+  BEGIN TRANSACTION
+  
+  BEGIN TRY
+    insert into Teacher(login,fname,lname,email,department,specialization) 
+      select *,@p_department,NULL from Student where login=@p_login;
+    delete from Student where login=@p_login;
+    COMMIT;  
+  END TRY  
+  BEGIN CATCH
+    ROLLBACK
+  END CATCH  
+END
+
+EXEC StudentBecomeTeacher 'kra28',1;
+
+select * from Student;
+select * from Teacher;
+
+--------------------------------------------------------------------------------
+-- Task 3:
+--------------------------------------------------------------------------------
+
+CREATE TABLE Student (
+  login    CHAR(6) PRIMARY KEY,
+  fname    VARCHAR(30) NOT NULL,
+  lname    VARCHAR(50) NOT NULL,
+  email    VARCHAR(50) NOT NULL,
+  tallness INT NOT NULL);
+  
+DROP TABLE Student;  
+  
+--------------------------------------------------------------------------------
+-- Task 3.1:
+--------------------------------------------------------------------------------  
+
+/*CREATE*/ ALTER PROCEDURE AddStudent2(@p_fname VARCHAR(30), @p_lname VARCHAR(50), @p_tallnes INT)
+AS
+BEGIN
+  DECLARE @v_login CHAR(6);
+  DECLARE @v_email VARCHAR(50);
+  
+  SET @v_login = SUBSTRING(LOWER(@p_lname), 1, 3) + '000';
+  SET @v_email = @v_login+'@vsb.cz';
+  
+  insert into Student values(@v_login, @p_fname, @p_lname, @v_email, @p_tallnes);
+END
+
+EXEC AddStudent2 'Michal', 'Kratky', 175;
+EXEC AddStudent2 'Michal', 'Sobota', 177;
+
+select * from Student;
+
+--------------------------------------------------------------------------------
+-- Task 4.1:
+--------------------------------------------------------------------------------
+
+ALTER TABLE Student ADD isTall BIT;  
+exec sp_columns 'Student';
+
+--------------------------------------------------------------------------------
+-- Task 4.2:
+--------------------------------------------------------------------------------
+
+/*CREATE*/ ALTER PROCEDURE IsStudentTall(@p_login CHAR(6))
+AS
+BEGIN
+  DECLARE @v_avg INT;
+  DECLARE @v_tallness INT;
+  DECLARE @v_isTall BIT;
+  
+  select @v_avg=avg(tallness) from Student;
+  select @v_tallness=tallness from Student where login=@p_login;
+  
+  IF @v_tallness < @v_avg
+    SET  @v_isTall = 0;
+  ELSE  
+    SET  @v_isTall = 1;
+    
+  update Student set isTall=@v_isTall where login=@p_login;
+END;
+
+EXEC IsStudentTall 'kra000';
+EXEC IsStudentTall 'sob000';
+
+select * from Student;
+
+--------------------------------------------------------------------------------
+-- Task 4.3:
+--------------------------------------------------------------------------------
+
+/*CREATE*/ ALTER FUNCTION LoginExist(@p_login CHAR(6))
+RETURNS BIT
+AS
+BEGIN
+  DECLARE @v_ret BIT;
+  IF EXISTS(select * from Student where login=@p_login)
+    SET @v_ret = 1;
+  ELSE
+    SET @v_ret = 0;
+    
+  RETURN @v_ret;
+END
+
+print dbo.LoginExist('kra000');
+
+
+/*CREATE*/ ALTER PROCEDURE AddStudent3(@p_fname VARCHAR(30), @p_lname VARCHAR(50), @p_tallnes INT)
+AS
+BEGIN
+  DECLARE @v_login CHAR(6);
+  DECLARE @v_email VARCHAR(50);
+  DECLARE @v_tmpLogin VARCHAR(10);
+  
+  SET @v_tmpLogin = SUBSTRING(LOWER(@p_lname), 1, 3);
+  
+  DECLARE @v_i INT;
+  SET @v_i = 0;
+  WHILE @v_i < 1000
+  BEGIN
+    IF @v_i < 10
+      SET @v_login = @v_tmpLogin + '00' + CAST(@v_i AS CHAR(1));
+    ELSE IF  @v_i < 100 
+      SET @v_login = @v_tmpLogin + '0' + CAST(@v_i AS CHAR(2));
+    ELSE IF  @v_i < 1000 
+      SET @v_login = @v_tmpLogin + CAST(@v_i AS CHAR(3));
+
+    -- Neexistence voln�ho loginu nen� o�et�ena
+    IF dbo.LoginExist(@v_login) = 0
+      BREAK;
+    
+    SET @v_i = @v_i + 1;
+  END
+  
+  SET @v_email = @v_login+'@vsb.cz';
+  
+  insert into Student values(@v_login, @p_fname, @p_lname, @v_email, @p_tallnes, NULL);
+END
+
+EXEC AddStudent3 'Michal', 'Kratky', 175;
+EXEC AddStudent3 'Michal', 'Sobota', 177;
+
+select * from Student;
+
+--------------------------------------------------------------------------------
+-- Task 5.1:
+--------------------------------------------------------------------------------
+
+/* CREATE */ ALTER PROCEDURE SetStudentTallness
+AS
+BEGIN
+  DECLARE @v_avg INT;
+  DECLARE @v_tallness INT;
+  DECLARE @v_isTall BIT;
+  DECLARE @v_login CHAR(6);
+  DECLARE studentList CURSOR FOR select login,tallness from Student;
+  
+  select @v_avg=avg(tallness) from Student;
+  
+  OPEN studentList;
+  FETCH NEXT FROM studentList INTO @v_login,@v_tallness;
+  
+  WHILE @@FETCH_STATUS = 0
+  BEGIN
+    IF @v_tallness < @v_avg
+      SET  @v_isTall = 0;
+    ELSE  
+      SET  @v_isTall = 1;
+
+    update Student set isTall=@v_isTall where login=@v_login;
+  
+    FETCH NEXT FROM studentList INTO @v_login,@v_tallness;
+  END
+  
+  CLOSE studentList;
+  DEALLOCATE studentList;
+END;
+
+EXEC SetStudentTallness;
+
+select * from Student;
+
+--------------------------------------------------------------------------------
+-- Task 6:
+--------------------------------------------------------------------------------
+
+select * from INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA = 'login' AND TABLE_NAME = 'Student';
+
+/* CREATE */ ALTER PROCEDURE CopyTableStructure(@p_table_schema VARCHAR(30), @p_table_name VARCHAR(30)) AS
+BEGIN
+  DECLARE c_columnList CURSOR FOR 
+    select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH 
+      from INFORMATION_SCHEMA.COLUMNS 
+      where TABLE_SCHEMA = @p_table_schema AND TABLE_NAME = @p_table_name;
+  DECLARE @v_command NVARCHAR(1000);
+  DECLARE @v_column_name VARCHAR(30);
+  DECLARE @v_data_type VARCHAR(10);
+  DECLARE @v_char_max_length INT;
+  DECLARE @v_index INT;
+  DECLARE @v_delim VARCHAR(1);
+  
+  OPEN c_columnList;
+  FETCH NEXT FROM c_columnList INTO @v_column_name,@v_data_type,@v_char_max_length;
+
+  SET @v_command = 'CREATE TABLE ' + @p_table_name + '_old (';
+  SET @v_index = 0;
+  
+  WHILE @@FETCH_STATUS = 0
+  BEGIN
+    IF @v_index > 0
+      SET @v_delim = ',';
+    ELSE  
+      SET @v_delim = '';
+
+    SET @v_command = @v_command + @v_delim + @v_column_name + ' ' + @v_data_type;
+    
+    IF (@v_data_type = 'char' OR @v_data_type = 'varchar')
+      SET @v_command = @v_command + '(' + CAST(@v_char_max_length AS VARCHAR(10)) + ')';
+      
+    FETCH NEXT FROM c_columnList INTO @v_column_name,@v_data_type,@v_char_max_length;
+    SET @v_index = @v_index + 1;
+  END
+  
+  SET @v_command = @v_command + ')';  
+  print @v_command;
+  
+  EXEC sp_executesql @v_command;
+  
+  CLOSE c_columnList;
+  DEALLOCATE c_columnList;  
+END;
+
+/* CREATE*/ ALTER PROCEDURE CopyTable(@p_table_schema VARCHAR(30), @p_table_name VARCHAR(30)) AS
+BEGIN
+  EXEC CopyTableStructure @p_table_schema,@p_table_name;
+  
+  DECLARE @v_command NVARCHAR(1000);
+  SET @v_command = 'INSERT INTO ' + @p_table_name + '_old SELECT * from ' + @p_table_name;
+  EXEC sp_executesql @v_command;  
+END;
+
+EXEC CopyTable 'kra28','Student';
+SELECT * from Student_old;
+DROP TABLE Student_old;
+
+--------------------------------------------------------------------------------
+-- Task 7:
+--------------------------------------------------------------------------------
+
+
+create table statistiky (operace varchar(20), pocet Int);
+insert into statistiky values ('insert', 0)
+insert into statistiky values ('update', 0)
+insert into statistiky values ('delete', 0)
+
+create trigger insertStudent
+on Student
+for insert
+as
+begin
+	update statistiky set pocet = pocet + 1 where operace = 'insert'
+end
+
+create trigger deleteStudent
+on Student
+for delete
+as
+begin
+	update statistiky set pocet = pocet + 1 where operace = 'delete'
+end
+
+
+create trigger updateStudent
+on Student
+for update
+as
+begin
+	update statistiky set pocet = pocet + 1 where operace = 'update'
+end
+
+-------------------
+
+create table Kurz ( id int primary key, name varchar(30), kapacita int);
+create table StudijniPlan( idStudent char(6), idKurz int);
+
+create trigger kontrolaKapacity
+on Studijniplan
+for insert
+as
+begin
+	if (select count(*) from StudijniPlan, Inserted where Studijniplan.idKurz = inserted.idKurz) >
+		(select kapacita from Kurz, Inserted where id = inserted.idKurz)
+		print 'Kapacita prekrocena';
+end;
+
+
+--------------------------------------------------------------------------------
+-- Task 8.1:
+--------------------------------------------------------------------------------
+
+-- _pract5 znamen� cvi�en� 5
+CREATE TABLE Teacher_pract5(
+  login CHAR(5) PRIMARY KEY,
+  fname VARCHAR(30) NOT NULL,
+  lname VARCHAR(50) NOT NULL,
+  email VARCHAR(50) NOT NULL,
+  department INT);
+  
+CREATE TABLE Department_pract5 (
+  id INT PRIMARY KEY IDENTITY,
+  name VARCHAR(50) NOT NULL,
+  head CHAR(5));
+  
+ALTER TABLE Teacher_pract5 ADD CONSTRAINT fk_teacher_pract5_dpt FOREIGN KEY(department) REFERENCES Department_pract5(id);
+ALTER TABLE Department_pract5 ADD CONSTRAINT fk_department_pract5_tch FOREIGN KEY(head) REFERENCES Teacher_pract5;
+  
+--------------------------------------------------------------------------------
+-- Task 8.2:
+--------------------------------------------------------------------------------
+
+ALTER TABLE Teacher_pract5 DROP CONSTRAINT fk_teacher_pract5_dpt;
+ALTER TABLE Department_pract5 DROP CONSTRAINT fk_department_pract5_tch;
+
+DROP TABLE Department_pract5;
+DROP TABLE Teacher_pract5;
+
+--------------------------------------------------------------------------------
+-- Task 8.3:
+--------------------------------------------------------------------------------
+
+INSERT INTO Department_pract5(name) VALUES('Katedra informatiky');
+INSERT INTO Department_pract5(name) VALUES('Katedra aplikovan� matematiky');
+INSERT INTO Department_pract5(name) VALUES('Katedra softwarov�ho in�en�rstv�');
+
+INSERT INTO Teacher_pract5 VALUES('sob28', 'Jan', 'Sobota', 'jan.sobota@vsb,cz', 1);
+INSERT INTO Teacher_pract5 VALUES('pon28', 'Jan', 'Pond�l�', 'jan.pond�l�@vsb.cz', 1);
+
+INSERT INTO Teacher_pract5 VALUES('ned29', 'Petr', 'Ned�le', 'petr.nedele@vsb,cz', 2);
+INSERT INTO Teacher_pract5 VALUES('ute29', 'Petr', '�ter�', 'petr.utery@vsb,cz', 2);
+
+INSERT INTO Teacher_pract5 VALUES('str29', 'Jana', 'St�edov�', 'jana.stredova@vsb,cz', 3);
+
+
+UPDATE Department_pract5 SET head='sob28' WHERE id=1;
+UPDATE Department_pract5 SET head='ned29' WHERE id=2;
+
+select * from Department_pract5;
+select * from Teacher_pract5;
+
+--------------------------------------------------------------------------------
+-- Task 9:
+--------------------------------------------------------------------------------
+
+CREATE /*ALTER*/ PROCEDURE PrintReport_pract5
+AS
+BEGIN
+  DECLARE @v_login CHAR(5);
+  DECLARE @v_fname VARCHAR(30);
+  DECLARE @v_lname VARCHAR(50);
+  DECLARE @v_email VARCHAR(50);
+  DECLARE @v_department INT;
+  DECLARE tchList CURSOR FOR SELECT * FROM Teacher_pract5 WHERE department IN 
+    (SELECT department FROM Teacher_pract5 GROUP BY department HAVING COUNT(*)>1) ORDER BY department;
+  
+  OPEN tchList;
+  FETCH NEXT FROM tchList INTO @v_login,@v_fname,@v_lname,@v_email,@v_department;
+  
+  WHILE @@FETCH_STATUS = 0
+  BEGIN
+    print 'Teacher ' + @v_login + ': ' + @v_fname + ' ' + @v_lname + ', email: ' + @v_email + ', Department ID: ' +  CAST(@v_department AS VARCHAR(3));
+  
+    FETCH NEXT FROM tchList INTO @v_login,@v_fname,@v_lname,@v_email,@v_department;
+  END
+  
+  CLOSE tchList;
+  DEALLOCATE tchList;  
+END;
+
+exec PrintReport_pract5;
+
+--------------------------------------------------------------------------------
+-- Task 10:
+--------------------------------------------------------------------------------
+
+select * from INFORMATION_SCHEMA.COLUMNS where TABLE_SCHEMA = 'ada321' AND TABLE_NAME = 'Department_pract5';
+
+select * from INFORMATION_SCHEMA.COLUMNS;
+
+CREATE /*ALTER*/ PROCEDURE CopyTableDate(@p_table_schema VARCHAR(30), @p_tableName VARCHAR(30)) AS
+BEGIN
+  EXEC CreateTableDate @p_table_schema, @p_tableName;
+  EXEC CopyTableDcp @p_table_schema, @p_tableName;
+END
+
+CREATE /* ALTER */ PROCEDURE CreateTableDate(@p_table_schema VARCHAR(30), @p_tableName VARCHAR(30)) AS
+BEGIN
+  DECLARE c_columnList CURSOR FOR 
+    select COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH 
+      from INFORMATION_SCHEMA.COLUMNS 
+      where TABLE_SCHEMA = @p_table_schema AND TABLE_NAME = @p_tableName;
+  DECLARE @v_command NVARCHAR(1000);
+  DECLARE @v_column_name VARCHAR(30);
+  DECLARE @v_data_type VARCHAR(10);
+  DECLARE @v_char_max_length INT;
+  DECLARE @v_index INT;
+  DECLARE @v_delim VARCHAR(1);
+  
+  OPEN c_columnList;
+  FETCH NEXT FROM c_columnList INTO @v_column_name,@v_data_type,@v_char_max_length;
+
+  SET @v_command = 'CREATE TABLE ' + @p_tableName + '_dcp (';
+  SET @v_index = 0;
+  
+  WHILE @@FETCH_STATUS = 0
+  BEGIN
+    IF @v_index > 0
+      SET @v_delim = ',';
+    ELSE  
+      SET @v_delim = '';
+
+    SET @v_command = @v_command + @v_delim + @v_column_name + ' ' + @v_data_type;
+    
+    IF (@v_data_type = 'char' OR @v_data_type = 'varchar')
+      SET @v_command = @v_command + '(' + CAST(@v_char_max_length AS VARCHAR(10)) + ')';
+      
+    FETCH NEXT FROM c_columnList INTO @v_column_name,@v_data_type,@v_char_max_length;
+    SET @v_index = @v_index + 1;
+  END
+  
+  SET @v_command = @v_command + ', date_copy DATE NOT NULL)';  
+  print @v_command;
+  
+  EXEC sp_executesql @v_command;
+  
+  CLOSE c_columnList;
+  DEALLOCATE c_columnList;  
+END;
+
+CREATE /* ALTER */ PROCEDURE CopyTableDcp(@p_table_schema VARCHAR(30), @p_tableName VARCHAR(30)) AS
+BEGIN
+  DECLARE @v_command NVARCHAR(1000);
+  SET @v_command = 'INSERT INTO ' + @p_tableName + '_dcp SELECT *,GETDATE() from ' + @p_tableName;
+  EXEC sp_executesql @v_command;
+END
+
+EXEC CopyTableDate 'kra28','Department_pract5';
+SELECT * from Student;
+SELECT * from Department_pract5_dcp;
+DROP TABLE Student_dcp;
+
+SELECT CURRENT_TIMESTAMP;
+print CAST('01-JAN-2009' AS DATETIME)
+print CONVERT(DATETIME,'01/JAN/2009')
+print CONVERT(DATETIME,'01.01.2011')
+
+DECLARE @mDate DATETIME
+SELECT @MDate = '01/JAN/09'
+SELECT CONVERT(VARCHAR(20),@mDate,106)
